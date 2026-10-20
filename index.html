@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="A Windows 95-style desktop for searching and tracking jobs on Gupy."
+    />
+    <title>Job Finder - Public Sources Desktop</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="desktop">
+      <div class="desktop-icons" aria-label="Desktop shortcuts">
+        <button class="desktop-icon" id="open-gupy" type="button">
+          <span class="icon-art gupy-art" aria-hidden="true">G</span>
+          <span>Job Sources</span>
+        </button>
+        <button class="desktop-icon" id="open-tracker" type="button">
+          <span class="icon-art folder-art" aria-hidden="true">📁</span>
+          <span>Job Tracker</span>
+        </button>
+      </div>
+
+      <section class="window" aria-label="Multi-Source Job Finder">
+        <header class="title-bar">
+          <div class="title">
+            <span class="title-icon" aria-hidden="true">▣</span>
+            <span>Multi-Source Job Finder</span>
+          </div>
+          <div class="window-controls" aria-hidden="true">
+            <span>_</span><span>□</span><span>×</span>
+          </div>
+        </header>
+
+        <nav class="menu-bar" aria-label="Main menu">
+          <span><u>F</u>ile</span>
+          <span><u>V</u>iew</span>
+          <span><u>H</u>elp</span>
+        </nav>
+
+        <div class="window-content">
+          <section class="search-panel" aria-labelledby="search-heading">
+            <div class="section-heading">
+              <span class="small-icon" aria-hidden="true">🔎</span>
+              <h1 id="search-heading">Find your next job</h1>
+            </div>
+            <p class="hint">Search by city, state or country. Accents, capitalization and common location abbreviations are normalized (for example, Sao Paulo and São Paulo). City searches may also include country-eligible remote roles.</p>
+            <form id="search-form" class="search-form">
+              <label>
+                Job title or keywords
+                <input
+                  id="keywords"
+                  name="keywords"
+                  type="search"
+                  placeholder="e.g. Product Designer"
+                  required
+                />
+              </label>
+              <label>
+                Location
+                <input
+                  id="location"
+                  name="location"
+                  type="search"
+                  placeholder="e.g. Sao Paulo, California, or Brazil"
+                />
+              </label>
+              <button class="button primary-button" type="submit">
+                Search selected sources
+              </button>
+            <fieldset class="source-picker">
+              <legend>Search sources</legend>
+              <label><input type="checkbox" name="source" value="gupy" checked /> Gupy</label>
+              <label><input type="checkbox" name="source" value="remoteok" checked /> Remote OK</label>
+              <label><input type="checkbox" name="source" value="weworkremotely" checked /> We Work Remotely</label>
+              <label><input type="checkbox" name="source" value="arbeitnow" checked /> Arbeitnow</label>
+              <label><input type="checkbox" name="source" value="himalayas" checked /> Himalayas</label>
+              <label><input type="checkbox" name="source" value="jobicy" checked /> Jobicy</label>
+              <label><input type="checkbox" name="source" value="workingnomads" checked /> Working Nomads</label>
+              <label><input type="checkbox" name="source" value="hackernews" checked /> HN Who is Hiring</label>
+              <label><input type="checkbox" name="source" value="eudev" checked /> eu.dev.br</label>
+            </fieldset>
+            </form>
+            <p class="source-note">
+              <span class="green-indicator" aria-hidden="true"></span>
+              Public APIs and feeds; failed sources are reported individually
+            </p>
+          </section>
+
+          <section class="tracker-panel results-panel" aria-labelledby="results-heading">
+            <div class="section-heading tracker-heading">
+              <span class="small-icon" aria-hidden="true">🔍</span>
+              <h2 id="results-heading">Job search results</h2>
+              <span class="job-count" id="results-count">No search yet</span>
+            </div>
+            <div class="table-wrap results-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Position</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Location</th>
+                    <th scope="col">Workplace</th>
+                    <th scope="col">Source</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody id="results-list"></tbody>
+              </table>
+              <div class="empty-state" id="results-empty">
+                <span class="empty-icon" aria-hidden="true">🔎</span>
+                <p>Search selected sources to see matching jobs.</p>
+                <span>Results come from public APIs and feeds.</span>
+              </div>
+            </div>
+            <p class="form-message results-message" id="results-message" role="alert"></p>
+            <button class="button load-more-button" id="load-more" type="button" hidden>
+              Load more jobs
+            </button>
+          </section>
+
+          <section class="tracker-panel requirements-panel" id="requirements-panel" aria-labelledby="requirements-heading" hidden>
+            <div class="section-heading tracker-heading">
+              <span class="small-icon" aria-hidden="true">📝</span>
+              <h2 id="requirements-heading">Requirements summary</h2>
+            </div>
+            <h3 id="selected-job-title"></h3>
+            <p class="requirements-company" id="selected-job-company"></p>
+            <ul id="requirements-list"></ul>
+            <p class="requirements-empty" id="requirements-empty" hidden>
+              No clear requirements were included in the retrieved listing. Open the original post for full details.
+            </p>
+            <a class="button original-job-link" id="original-job-link" target="_blank" rel="noopener noreferrer">Open original listing</a>
+          </section>
+
+          <section class="tracker-panel" id="tracker" aria-labelledby="tracker-heading">
+            <div class="section-heading tracker-heading">
+              <span class="small-icon" aria-hidden="true">📋</span>
+              <h2 id="tracker-heading">Saved jobs</h2>
+              <span class="job-count" id="job-count">0 jobs</span>
+              <button class="button add-button" id="show-form" type="button">
+                + Add job
+              </button>
+            </div>
+
+            <form id="job-form" class="job-form" hidden>
+              <div class="form-grid">
+                <label>
+                  Job title
+                  <input name="title" required maxlength="120" />
+                </label>
+                <label>
+                  Company
+                  <input name="company" required maxlength="120" />
+                </label>
+                <label>
+                  Location
+                  <input name="location" maxlength="120" />
+                </label>
+                <label>
+                  Job URL from a supported source
+                  <input
+                    name="url"
+                    type="url"
+                    placeholder="https://..."
+                    required
+                  />
+                </label>
+              </div>
+              <div class="form-actions">
+                <p class="form-message" id="form-message" role="alert"></p>
+                <button class="button" id="cancel-form" type="button">Cancel</button>
+                <button class="button primary-button" type="submit">Save job</button>
+              </div>
+            </form>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Position</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Location</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">Added</th>
+                    <th scope="col"><span class="visually-hidden">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody id="job-list"></tbody>
+              </table>
+              <div class="empty-state" id="empty-state">
+                <span class="empty-icon" aria-hidden="true">📂</span>
+                <p>No saved jobs yet.</p>
+                <span>Search the job sources and save listings to keep track of.</span>
+              </div>
+            </div>
+          </section>
+
+          <p class="privacy-note">Results link back to their original sources. Saved jobs stay in this browser.</p>
+        </div>
+
+        <footer class="status-bar">
+          <span id="status-text">Ready</span>
+          <span class="status-source">Public job APIs &amp; feeds</span>
+        </footer>
+      </section>
+
+      <div class="taskbar">
+        <button class="start-button" type="button">
+          <span class="windows-mark" aria-hidden="true">⊞</span>
+          <strong>Start</strong>
+        </button>
+        <span class="taskbar-divider" aria-hidden="true"></span>
+        <button class="taskbar-app" type="button" id="taskbar-app">
+          ▣ Multi-Source Job Finder
+        </button>
+        <time class="clock" id="clock"></time>
+      </div>
+    </main>
+  </body>
+</html>
