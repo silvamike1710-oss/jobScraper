@@ -130,6 +130,12 @@ function loadJobs() {
         source,
         sourceName: SOURCE_NAMES[source],
         sourceUrl: SOURCE_URLS[source],
+        title: LOCATION_SEARCH.cleanDisplayText(job.title),
+        company: LOCATION_SEARCH.cleanDisplayText(job.company),
+        location: LOCATION_SEARCH.cleanDisplayText(job.location),
+        requirementsSummary: Array.isArray(job.requirementsSummary)
+          ? job.requirementsSummary.map(LOCATION_SEARCH.cleanDisplayText).filter(Boolean)
+          : [],
       });
     }
     return [...unique.values()];
@@ -224,7 +230,6 @@ async function showRequirements(job) {
   }
   originalJobLink.href = job.url;
   requirementsPanel.hidden = false;
-  requirementsPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function updateSavedJobs() {
@@ -417,7 +422,17 @@ async function loadJobCatalog() {
         ) {
           throw new Error("Published job catalog has an unexpected format.");
         }
-        jobCatalog = catalog;
+        jobCatalog = {
+          ...catalog,
+          jobs: catalog.jobs.map((job) => ({
+            ...job,
+            title: LOCATION_SEARCH.cleanDisplayText(job.title),
+            company: LOCATION_SEARCH.cleanDisplayText(job.company),
+            location: LOCATION_SEARCH.cleanDisplayText(job.location),
+            workplaceType: LOCATION_SEARCH.cleanDisplayText(job.workplaceType),
+            requirementsSummary: job.requirementsSummary.map(LOCATION_SEARCH.cleanDisplayText).filter(Boolean),
+          })),
+        };
         if (catalog.generatedAt) {
           statusText.textContent = `Catalog refreshed ${new Intl.DateTimeFormat(undefined, {
             dateStyle: "medium",

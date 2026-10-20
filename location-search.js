@@ -18,6 +18,58 @@
       .trim();
   }
 
+  function cleanDisplayText(value) {
+    const entities = {
+      aacute: "á", acirc: "â", agrave: "à", auml: "ä", atilde: "ã",
+      amp: "&", apos: "'", bull: "•", ccedil: "ç", copy: "©", eacute: "é",
+      ecirc: "ê", egrave: "è", euro: "€", hellip: "…", iacute: "í",
+      icirc: "î", igrave: "ì", laquo: "«", ldquo: "“", lsquo: "‘", mdash: "—",
+      nbsp: " ", ndash: "–", ntilde: "ñ", oacute: "ó", ocirc: "ô", ograve: "ò",
+      ouml: "ö", otilde: "õ", pound: "£", quot: '"', raquo: "»", rdquo: "”",
+      reg: "®", rsquo: "’", uacute: "ú", ucirc: "û", ugrave: "ù", uuml: "ü",
+      yacute: "ý", trade: "™",
+    };
+    let text = String(value || "")
+      .replace(/â€™/g, "’")
+      .replace(/â€œ/g, "“")
+      .replace(/â€/g, "”")
+      .replace(/â€“/g, "–")
+      .replace(/â€”/g, "—")
+      .replace(/â€¦/g, "…")
+      .replace(/â€¢/g, "•")
+      .replace(/ï¸/g, "")
+      .replace(/ï¿½/g, " ")
+      .replace(/Â(?=\s|[.,;:!?])/g, "")
+      .replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, (entity, name) => {
+        if (name[0] === "#") {
+          const codePoint = name[1].toLowerCase() === "x"
+            ? Number.parseInt(name.slice(2), 16)
+            : Number.parseInt(name.slice(1), 10);
+          return codePoint > 0 && codePoint <= 0x10ffff
+            ? String.fromCodePoint(codePoint)
+            : " ";
+        }
+        return entities[name.toLowerCase()] || " ";
+      });
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      text = text.replace(
+        /(?:Ã[\u0080-\u00bf]|Â[\u0080-\u00bf]|â[\u0080-\u00bf]{1,2}|ð[\u0080-\u00bf]{1,3})/g,
+        (sequence) => {
+          const bytes = Uint8Array.from([...sequence], (character) => character.charCodeAt(0) & 0xff);
+          const decoded = new TextDecoder().decode(bytes);
+          return decoded.includes("\ufffd") ? sequence : decoded;
+        },
+      );
+    }
+    return text
+      .replace(/ï¸/g, "")
+      .replace(/ï¿½/g, " ")
+      .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060\ufeff\ufffd]/g, " ")
+      .replace(/\p{Extended_Pictographic}(?:\uFE0F|\u200D|\p{Extended_Pictographic})*/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   const aliases = new Map();
   const brazilStates = {
     acre: "ac",
@@ -176,6 +228,7 @@
 
   const api = {
     normalizeSearchText,
+    cleanDisplayText,
     isBrazilLocation,
     isBrazilCountry,
     matchesLocation,

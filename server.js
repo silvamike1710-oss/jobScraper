@@ -2,6 +2,7 @@ const http = require("node:http");
 const { readFile } = require("node:fs/promises");
 const path = require("node:path");
 const {
+  cleanDisplayText,
   isBrazilCountry,
   isBrazilLocation,
   matchesLocation,
@@ -212,66 +213,78 @@ function decodeXml(value) {
     .trim();
 }
 
+function decodeHtmlEntities(value) {
+  return cleanDisplayText(value);
+}
+
 function summarizeRequirements(description) {
   if (typeof description !== "string" || !description.trim()) return [];
 
-  const text = description
+  const text = decodeHtmlEntities(description)
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<li\b[^>]*>/gi, "\n")
-    .replace(/<\/(?:p|div|section|h[1-6]|ul|ol|li|br)\s*>/gi, "\n")
+    .replace(/<(?:li|p|div|section|article|h[1-6]|ul|ol|tr)\b[^>]*>/gi, "\n")
+    .replace(/<\/(?:li|p|div|section|article|h[1-6]|ul|ol|tr)\s*>/gi, "\n")
     .replace(/<br\b[^>]*>/gi, "\n")
-    .replace(
-      /(?=(?:requirements?|qualifications?|what you(?:'ll| will) need|what you bring|who you are|must[- ]haves?|skills?|requisitos?|qualifica(?:ções|coes)|o que esperamos|o que você precisa|experiência|conhecimentos|formação|habilidades|desejáveis?))/gi,
-      "\n",
-    )
     .replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&ndash;/gi, "–")
-    .replace(/&mdash;/gi, "—")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&amp;/gi, "&")
-    .replace(/&#(\d+);/g, (_, decimal) => String.fromCodePoint(Number(decimal)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/[ \t\f\v]+/g, " ")
+    .replace(/\b(requirements?\s+and\s+qualifications?|requisitos?\s+e\s+qualifica(?:ções|coes)|responsibilities\s+and\s+attributions?|responsabilidades\s+e\s+atribuições|additional information|informações adicionais|benefits|benefícios)\b/gi, "\n$1\n")
+    .replace(/\b(?:o que buscamos|what we(?:'re| are) looking for)\s*[:\-–]?\s*/gi, "")
+    .replace(/#LI-[A-Z0-9-]+/gi, " ")
+    .replace(/\b(requirements?\s+and\s+qualifications?|requisitos?\s+e\s+qualifica(?:ções|coes))\s*(?::|\-)?(?=\s*[A-ZÀ-ÖØ-Þ0-9])/gi, "$1\n")
+    .replace(/\b(requirements?|qualifications?|requisitos?|qualifica(?:ções|coes))\s*[:\-–]\s*/gi, "$1\n")
+    .replace(/([a-z0-9])(?=(?:requirements?|qualifications?|responsibilities|requisitos?|qualifica(?:ções|coes)|responsabilidades|informações adicionais|benefícios)\b)/gi, "$1\n")
+    .replace(/([a-z])(?=(?:conhecimento|experiência|formação|ensino|graduação|inglês|português|habilidade|certificação|requisito|mínimo|desejável|obrigatório|superior|vivência|domínio)\b)/gi, "$1\n")
+    .replace(/[^\S\n]+/g, " ")
     .replace(/ *\n */g, "\n")
     .trim();
   const lines = text
     .split(/\n+/)
-    .map((line) => line.replace(/^[\s•*–-]+/, "").trim())
+    .map((line) => line.replace(/^[\s•●▪◦*–-]+/, "").trim())
     .filter(Boolean);
   const sectionHeading =
-    /\b(requirements?|qualifications?|what you(?:'ll| will) need|what you bring|who you are|must[- ]haves?|skills?|requisitos?|qualifica(?:ções|coes)|o que esperamos|o que você precisa|experiência|conhecimentos|formação|habilidades|desejáveis?)\b/i;
+    /^(?:requirements?(?:\s+and\s+qualifications?)?|qualifications?|what you(?:'ll| will) need|what you bring|who you are|must[- ]haves?|skills?|requisitos?(?:\s+e\s+qualifica(?:ções|coes))?|qualifica(?:ções|coes)|o que esperamos|o que você precisa|experiência|conhecimentos|formação|habilidades|desejáveis?)(?:\s*[:\-–].*)?$/i;
   const nextSection =
-    /^(?:responsibilities|what you(?:'ll| will) do|about (?:the role|you|us)|benefits|nice to have|about us|responsabilidades|benefícios|sobre nós)\b/i;
+    /^(?:responsibilities|what you(?:'ll| will) do|about (?:the role|you|us)|benefits|nice to have|about us|responsabilidades|benefícios|informações adicionais|sobre nós)\b/i;
   let inRequirements = false;
   const relevantLines = [];
 
   for (const line of lines) {
-    if (nextSection.test(line)) inRequirements = false;
-    if (sectionHeading.test(line)) inRequirements = true;
-    if (inRequirements && !sectionHeading.test(line)) relevantLines.push(line);
+    if (nextSection.test(line)) {
+      inRequirements = false;
+      continue;
+    }
+    if (sectionHeading.test(line)) {
+      inRequirements = true;
+      continue;
+    }
+    if (inRequirements) relevantLines.push(line);
   }
 
-  const candidates = (relevantLines.length ? relevantLines : lines)
-    .flatMap((line) => line.split(/;\s*|(?<=[.!?])\s+(?=[A-ZÀ-Ý0-9])/))
+  const hasRequirementsSection = relevantLines.length > 0;
+  const candidates = (hasRequirementsSection ? relevantLines : lines)
+    .flatMap((line) =>
+      line
+        .split(/(?:\s*[•●▪◦]\s*|\s*;\s*|(?<=[.!?])\s+(?=[A-ZÀ-Ý0-9]))/)
+        .flatMap((part) => part.split(/(?<=[.!?])(?=[A-ZÀ-Ý])/)),
+    )
     .map((sentence) => sentence.replace(/\s+/g, " ").trim())
-    .filter((sentence) => sentence.length >= 20)
+    .filter((sentence) => sentence.length >= 16)
     .filter((sentence) => !/\b(compensation|salary|benefits?|pay range|remuneration)\b/i.test(sentence))
-    .filter((sentence) =>
-      /\b(experience|years?|degree|bachelor|master|phd|proficien|knowledge|skill|ability|familiar|expert|must|require|qualification|preferred|background|fluent|english|portuguese|requisitos?|experiência|anos|graduação|formação|conhecimento|habilidade|domínio|desejável|necessário|necessária|inglês|português|certifica(?:tion|ção))\b/i.test(
-        sentence,
-      ),
+    .filter(
+      (sentence) =>
+        hasRequirementsSection ||
+        /\b(experience|years?|degree|bachelor|master|phd|proficien|knowledge|skill|ability|familiar|expert|must|require|qualification|preferred|background|fluent|english|portuguese|requisitos?|experiência|anos|graduação|formação|conhecimento|conhecimentos|habilidade|domínio|desejável|necessário|necessária|inglês|português|certifica(?:tion|ção)|mínimo|superior|ensino|vivência|curso|tecnologia|sql|java|python)\b/i.test(
+          sentence,
+        ),
     );
-  const unique = [...new Set(candidates)];
-  return unique.slice(0, 3).map((sentence) => {
-    if (sentence.length <= 180) return sentence;
-    const clipped = sentence.slice(0, 177);
+  const unique = [...new Set(candidates)]
+    .filter((sentence) => !/^(?:benef[ií]cios|informa[cç][oõ]es adicionais|responsabilidades)\b/i.test(sentence))
+    .slice(0, 8);
+  return unique.map((sentence) => {
+    if (sentence.length <= 280) return sentence;
+    const clipped = sentence.slice(0, 277);
     const lastSpace = clipped.lastIndexOf(" ");
-    return `${clipped.slice(0, lastSpace > 160 ? lastSpace : 217).trimEnd()}…`;
+    return `${clipped.slice(0, lastSpace > 240 ? lastSpace : clipped.length).trimEnd()}…`;
   });
 }
 
@@ -359,10 +372,10 @@ function normalizeJob(source, id, title, company, location, workplaceType, publi
     source,
     sourceName: SOURCE_INFO[source].name,
     sourceUrl: SOURCE_INFO[source].url,
-    title: title.trim(),
-    company: company.trim(),
-    location: String(location || "").trim(),
-    workplaceType: workplaceType || "",
+    title: decodeHtmlEntities(title).replace(/\s+/g, " ").trim(),
+    company: decodeHtmlEntities(company).replace(/\s+/g, " ").trim(),
+    location: decodeHtmlEntities(location).replace(/\s+/g, " ").trim(),
+    workplaceType: decodeHtmlEntities(workplaceType || "").replace(/\s+/g, " ").trim(),
     publishedAt: publishedAt || "",
     url,
     requirementsSummary: summarizeRequirements(description),
@@ -845,6 +858,8 @@ module.exports = {
   SOURCE_INFO,
   SOURCE_ADAPTERS,
   getEuDevJobDetails,
+  summarizeRequirements,
+  decodeHtmlEntities,
 };
 
 if (require.main === module) {
