@@ -14,6 +14,8 @@ const SEARCH_TERMS = [
   "data",
   "devops",
   "desenvolvedor",
+  "programador",
+  "programadora",
   "engenheiro",
   "analista",
   "dados",

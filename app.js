@@ -341,19 +341,17 @@ function addResults(newJobs) {
 async function fetchSource(source, offset) {
   if (STATIC_CATALOG_MODE) {
     const catalog = await loadJobCatalog();
-    const searchTerms = LOCATION_SEARCH.normalizeSearchText(search.term).split(" ").filter(Boolean);
     const matchingJobs = catalog.jobs.filter((job) => {
       if (job.source !== source) return false;
-      const searchableText = LOCATION_SEARCH.normalizeSearchText([
+      return (
+        LOCATION_SEARCH.matchesJobSearch([
         job.title,
         job.company,
         job.location,
         job.workplaceType,
         ...(Array.isArray(job.searchKeywords) ? job.searchKeywords : []),
         ...(Array.isArray(job.requirementsSummary) ? job.requirementsSummary : []),
-      ].join(" "));
-      return (
-        searchTerms.every((word) => searchableText.includes(word)) &&
+        ], search.term) &&
         LOCATION_SEARCH.matchesSourceLocation(job.location, search.location, source)
       );
     });

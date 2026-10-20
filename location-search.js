@@ -154,12 +154,33 @@
     return matchesLocation(value, location);
   }
 
+  const jobSearchAliases = new Map();
+  for (const terms of [
+    ["developer", "developers", "desenvolvedor", "desenvolvedora", "programador", "programadora"],
+    ["engineer", "engineering", "engenheiro", "engenheira", "engenharia"],
+    ["analyst", "analysta", "analista"],
+    ["designer", "design"],
+  ]) {
+    const normalizedTerms = terms.map(normalizeSearchText);
+    for (const term of normalizedTerms) jobSearchAliases.set(term, normalizedTerms);
+  }
+
+  function matchesJobSearch(values, query) {
+    const searchableText = normalizeSearchText(values.join(" "));
+    const normalizedQuery = normalizeSearchText(query);
+    const variants = jobSearchAliases.get(normalizedQuery) || [normalizedQuery];
+    return variants.some((variant) =>
+      variant.split(" ").filter(Boolean).every((word) => searchableText.includes(word)),
+    );
+  }
+
   const api = {
     normalizeSearchText,
     isBrazilLocation,
     isBrazilCountry,
     matchesLocation,
     matchesSourceLocation,
+    matchesJobSearch,
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.JobFinderLocationSearch = api;

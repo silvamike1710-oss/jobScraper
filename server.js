@@ -298,24 +298,42 @@ async function fetchText(url, cacheKey, ttl) {
   if (cached && cached.expiresAt > Date.now()) return cached.value;
 
   const origin = new URL(url).origin;
-  await waitForRequestSlot(origin);
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
-  try {
-    const response = await fetch(url, {
-      headers: {
-        accept: "application/json, application/rss+xml, application/xml, text/xml",
-        "user-agent": "RetroJobFinder/1.0 (public job search; local use)",
-      },
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Upstream returned HTTP ${response.status}.`);
-    const value = await response.text();
-    cache.set(cacheKey, { value, expiresAt: Date.now() + ttl });
-    return value;
-  } finally {
-    clearTimeout(timeout);
+  const retryableStatuses = new Set([429, 502, 503, 504]);
+  for (let attempt = 0; attempt <= 2; attempt += 1) {
+    await waitForRequestSlot(origin);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          accept: "application/json, application/rss+xml, application/xml, text/xml",
+          "user-agent": "RetroJobFinder/1.0 (public job search; local use)",
+        },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        if (retryableStatuses.has(response.status) && attempt < 2) {
+          const retryAfter = response.headers.get("retry-after");
+          const retryAfterSeconds = Number(retryAfter);
+          const retryAfterDate = Date.parse(retryAfter || "");
+          const delayMs = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+            ? Math.min(retryAfterSeconds * 1000, 30_000)
+            : Number.isFinite(retryAfterDate)
+              ? Math.min(Math.max(retryAfterDate - Date.now(), 0), 30_000)
+              : 1000 * 2 ** attempt;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+        throw new Error(`Upstream returned HTTP ${response.status}.`);
+      }
+      const value = await response.text();
+      cache.set(cacheKey, { value, expiresAt: Date.now() + ttl });
+      return value;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+  throw new Error("Upstream request failed after retries.");
 }
 
 async function fetchJson(url, cacheKey, ttl) {

@@ -36,14 +36,14 @@ When run locally, the Node.js server calls the selected public APIs and feeds di
 
 ## Publish on GitHub Pages
 
-The GitHub Pages version searches a static `jobs.json` catalog, so it does not need an always-on backend or browser access to the sources. A GitHub Actions workflow refreshes the catalog and deploys the site every six hours. You can also refresh it on demand.
+The GitHub Pages version searches a static `jobs.json` catalog, so it does not need an always-on backend or browser access to the sources. A GitHub Actions workflow refreshes the catalog and deploys the site on each push to the default branch, every six hours, or on demand.
 
 1. Push this project to a public GitHub repository on its default branch (GitHub Free includes Pages for public repositories).
 2. In **Settings → Pages**, set the build and deployment source to **GitHub Actions**.
-3. Open **Actions → Refresh job catalog and deploy Pages → Run workflow** to create and publish the first catalog.
+3. Open **Actions → Refresh job catalog and deploy Pages → Run workflow** to create and publish the first catalog. Future pushes to the default branch also refresh it.
 4. Open the Pages URL shown in the workflow's deployment result.
 
-The workflow needs the repository's standard Pages deployment permissions; it does not require API secrets. The published catalog is public. Searches on Pages are limited to jobs fetched by the workflow's curated role keywords and page limits, rather than arbitrary live upstream searches. Catalog freshness is shown in the status bar. Requirements are precomputed during catalog generation; eu.dev.br detail extraction is capped at 60 listings per refresh. Some sources may fail or change their public endpoints; those collection errors are reported in the site and the other sources can still contribute results.
+The workflow needs the repository's standard Pages deployment permissions; it does not require API secrets. The published catalog is public. Searches on Pages are limited to jobs fetched by the workflow's curated role keywords (including developer, desenvolvedor, programador, engineer, designer, analyst, and related terms) and page limits, rather than arbitrary live upstream searches. Catalog freshness is shown in the status bar. Requirements are precomputed during catalog generation; eu.dev.br detail extraction is capped at 60 listings per refresh. Transient upstream rate limits receive bounded retries; if a source still fails, its collection issues are reported in the site and the other sources can still contribute results.
 
 To refresh the catalog locally, run `npm run refresh-catalog`; this overwrites `jobs.json` with the latest generated catalog.
 

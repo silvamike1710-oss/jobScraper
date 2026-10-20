@@ -33,7 +33,6 @@ jobs:
           node-version: 20
 
       - name: Refresh public job catalog
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         run: npm run refresh-catalog
 
       - name: Configure GitHub Pages
