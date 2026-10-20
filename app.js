@@ -23,6 +23,11 @@ const SOURCE_URLS = {
   eudev: "https://eu.dev.br/vagas/",
 };
 const SOURCE_IDS = Object.keys(SOURCE_NAMES);
+const LOCATION_SEARCH = window.JobFinderLocationSearch;
+const STATIC_CATALOG_MODE =
+  !["localhost", "127.0.0.1"].includes(location.hostname) ||
+  new URLSearchParams(location.search).has("catalog");
+const STATIC_PAGE_SIZE = 20;
 
 const searchForm = document.querySelector("#search-form");
 const searchButton = searchForm.querySelector('button[type="submit"]');
@@ -51,6 +56,8 @@ let searchResults = [];
 let sourceOffsets = {};
 let sourceHasMore = {};
 let searchInProgress = false;
+let jobCatalog;
+let catalogLoadPromise;
 
 function getSourceForUrl(value) {
   try {
@@ -177,7 +184,7 @@ async function showRequirements(job) {
   requirementsEmpty.hidden = true;
   requirementsEmpty.textContent = "Loading requirements from the original listing…";
   requirementsEmpty.hidden = false;
-  if (!summary.length && job.source === "eudev") {
+  if (!summary.length && job.source === "eudev" && !STATIC_CATALOG_MODE) {
     try {
       const path = new URL(job.url).pathname;
       const response = await fetch(`/api/job-details?path=${encodeURIComponent(path)}`);
@@ -332,6 +339,34 @@ function addResults(newJobs) {
 }
 
 async function fetchSource(source, offset) {
+  if (STATIC_CATALOG_MODE) {
+    const catalog = await loadJobCatalog();
+    const searchTerms = LOCATION_SEARCH.normalizeSearchText(search.term).split(" ").filter(Boolean);
+    const matchingJobs = catalog.jobs.filter((job) => {
+      if (job.source !== source) return false;
+      const searchableText = LOCATION_SEARCH.normalizeSearchText([
+        job.title,
+        job.company,
+        job.location,
+        job.workplaceType,
+        ...(Array.isArray(job.searchKeywords) ? job.searchKeywords : []),
+        ...(Array.isArray(job.requirementsSummary) ? job.requirementsSummary : []),
+      ].join(" "));
+      return (
+        searchTerms.every((word) => searchableText.includes(word)) &&
+        LOCATION_SEARCH.matchesSourceLocation(job.location, search.location, source)
+      );
+    });
+    const jobs = matchingJobs.slice(offset, offset + STATIC_PAGE_SIZE);
+    const nextOffset = offset + jobs.length;
+    return {
+      jobs,
+      total: matchingJobs.length,
+      nextOffset,
+      hasMore: nextOffset < matchingJobs.length,
+    };
+  }
+
   const params = new URLSearchParams({
     source,
     term: search.term,
@@ -359,6 +394,46 @@ async function fetchSource(source, offset) {
     throw new Error(`${SOURCE_NAMES[source]} returned an unexpected response.`);
   }
   return result;
+}
+
+async function loadJobCatalog() {
+  if (!catalogLoadPromise) {
+    catalogLoadPromise = fetch(new URL("./jobs.json", document.baseURI), { cache: "no-cache" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Could not load published job catalog (HTTP ${response.status}).`);
+        const catalog = await response.json();
+        if (
+          !catalog ||
+          !Array.isArray(catalog.jobs) ||
+          catalog.jobs.some(
+            (job) =>
+              !job ||
+              typeof job.id !== "string" ||
+              typeof job.source !== "string" ||
+              typeof job.title !== "string" ||
+              typeof job.company !== "string" ||
+              typeof job.location !== "string" ||
+              typeof job.url !== "string" ||
+              !Array.isArray(job.requirementsSummary)
+          )
+        ) {
+          throw new Error("Published job catalog has an unexpected format.");
+        }
+        jobCatalog = catalog;
+        if (catalog.generatedAt) {
+          statusText.textContent = `Catalog refreshed ${new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(catalog.generatedAt))}`;
+        }
+        return catalog;
+      })
+      .catch((error) => {
+        catalogLoadPromise = undefined;
+        throw error;
+      });
+  }
+  return catalogLoadPromise;
 }
 
 async function searchSources(append = false) {
@@ -408,11 +483,29 @@ async function searchSources(append = false) {
       addResults(result.jobs);
     }
     renderSearchResults();
+    const catalogWarnings = STATIC_CATALOG_MODE
+      ? selectedSources
+          .flatMap((source) => jobCatalog?.sourceFailures?.[source] || [])
+          .length
+      : 0;
     if (failures.length) {
       resultsMessage.textContent = `Some sources could not be searched: ${failures.join(" ")}`;
       statusText.textContent = "Search completed with source errors";
+    } else if (catalogWarnings) {
+      resultsMessage.textContent =
+        `Some sources reported ${catalogWarnings} collection issue${catalogWarnings === 1 ? "" : "s"} during the last catalog refresh; results may be incomplete.`;
+      statusText.textContent = `${searchResults.length} jobs found · catalog warnings`;
     } else {
-      statusText.textContent = `${searchResults.length} jobs found`;
+      statusText.textContent = STATIC_CATALOG_MODE && jobCatalog?.generatedAt
+        ? `${searchResults.length} jobs found · refreshed ${new Intl.DateTimeFormat(undefined, {
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(jobCatalog.generatedAt))}`
+        : `${searchResults.length} jobs found`;
+    }
+    if (STATIC_CATALOG_MODE && !jobCatalog?.generatedAt) {
+      resultsMessage.textContent =
+        "The published catalog has not been generated yet. Run the “Refresh job catalog and deploy Pages” workflow in GitHub Actions.";
     }
   } finally {
     searchInProgress = false;

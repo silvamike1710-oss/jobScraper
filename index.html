@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="A Windows 95-style desktop for searching and tracking jobs on Gupy."
+      content="A Windows 95-style desktop for searching and tracking jobs from public job sources."
     />
     <title>Job Finder - Public Sources Desktop</title>
     <link rel="stylesheet" href="styles.css" />
+    <script src="location-search.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -47,7 +48,7 @@
               <span class="small-icon" aria-hidden="true">🔎</span>
               <h1 id="search-heading">Find your next job</h1>
             </div>
-            <p class="hint">Search by city, state or country. Accents, capitalization and common location abbreviations are normalized (for example, Sao Paulo and São Paulo). City searches may also include country-eligible remote roles.</p>
+            <p class="hint">Search the published job catalog by title, keywords, city, state or country. It refreshes every six hours; city searches may include country-eligible remote roles.</p>
             <form id="search-form" class="search-form">
               <label>
                 Job title or keywords

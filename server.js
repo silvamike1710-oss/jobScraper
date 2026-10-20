@@ -1,6 +1,13 @@
 const http = require("node:http");
 const { readFile } = require("node:fs/promises");
 const path = require("node:path");
+const {
+  isBrazilCountry,
+  isBrazilLocation,
+  matchesLocation,
+  matchesSourceLocation,
+  normalizeSearchText,
+} = require("./location-search.js");
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PORT || 3000);
@@ -23,6 +30,8 @@ const PUBLIC_FILES = new Map([
   ["/index.html", { file: "index.html", type: "text/html; charset=utf-8" }],
   ["/styles.css", { file: "styles.css", type: "text/css; charset=utf-8" }],
   ["/app.js", { file: "app.js", type: "text/javascript; charset=utf-8" }],
+  ["/location-search.js", { file: "location-search.js", type: "text/javascript; charset=utf-8" }],
+  ["/jobs.json", { file: "jobs.json", type: "application/json; charset=utf-8" }],
 ]);
 const SOURCE_INFO = {
   gupy: { name: "Gupy", url: "https://portal.gupy.io/" },
@@ -60,156 +69,6 @@ function isGupyJobUrl(value) {
   } catch {
     return false;
   }
-}
-
-function normalizeSearchText(value) {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[ßæœøłđðþ]/g, (character) => ({
-      ß: "ss",
-      æ: "ae",
-      œ: "oe",
-      ø: "o",
-      ł: "l",
-      đ: "d",
-      ð: "d",
-      þ: "th",
-    })[character])
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-const LOCATION_ALIASES = new Map();
-const BRAZIL_STATES = {
-  acre: "ac",
-  alagoas: "al",
-  amapá: "ap",
-  amazonas: "am",
-  bahia: "ba",
-  ceará: "ce",
-  "distrito federal": "df",
-  "espírito santo": "es",
-  goiás: "go",
-  maranhão: "ma",
-  "mato grosso": "mt",
-  "mato grosso do sul": "ms",
-  "minas gerais": "mg",
-  pará: "pa",
-  paraíba: "pb",
-  paraná: "pr",
-  pernambuco: "pe",
-  piauí: "pi",
-  "rio de janeiro": "rj",
-  "rio grande do norte": "rn",
-  "rio grande do sul": "rs",
-  rondônia: "ro",
-  roraima: "rr",
-  "santa catarina": "sc",
-  "são paulo": "sp",
-  sergipe: "se",
-  tocantins: "to",
-};
-const US_STATES = {
-  alabama: "al", alaska: "ak", arizona: "az", arkansas: "ar", california: "ca",
-  colorado: "co", connecticut: "ct", delaware: "de", florida: "fl", georgia: "ga",
-  hawaii: "hi", idaho: "id", illinois: "il", indiana: "in", iowa: "ia", kansas: "ks",
-  kentucky: "ky", louisiana: "la", maine: "me", maryland: "md", massachusetts: "ma",
-  michigan: "mi", minnesota: "mn", mississippi: "ms", missouri: "mo", montana: "mt",
-  nebraska: "ne", nevada: "nv", "new hampshire": "nh", "new jersey": "nj",
-  "new mexico": "nm", "new york": "ny", "north carolina": "nc", "north dakota": "nd",
-  ohio: "oh", oklahoma: "ok", oregon: "or", pennsylvania: "pa", "rhode island": "ri",
-  "south carolina": "sc", "south dakota": "sd", tennessee: "tn", texas: "tx",
-  utah: "ut", vermont: "vt", virginia: "va", washington: "wa",
-  "west virginia": "wv", wisconsin: "wi", wyoming: "wy",
-};
-const US_STATE_CODES = new Set(Object.values(US_STATES));
-
-function addLocationAliases(entries) {
-  for (const [name, abbreviation] of Object.entries(entries)) {
-    const normalizedName = normalizeSearchText(name);
-    const normalizedAbbreviation = normalizeSearchText(abbreviation);
-    LOCATION_ALIASES.set(normalizedName, [
-      ...new Set([...(LOCATION_ALIASES.get(normalizedName) || []), normalizedAbbreviation]),
-    ]);
-    LOCATION_ALIASES.set(normalizedAbbreviation, [
-      ...new Set([...(LOCATION_ALIASES.get(normalizedAbbreviation) || []), normalizedName]),
-    ]);
-  }
-}
-
-addLocationAliases(BRAZIL_STATES);
-addLocationAliases(US_STATES);
-for (const [name, aliases] of Object.entries({
-  brazil: ["brasil", "br"],
-  brasil: ["brazil", "br"],
-  "united states": ["usa", "us", "united states of america"],
-  usa: ["us", "united states", "united states of america"],
-  "united kingdom": ["uk", "great britain", "britain"],
-  uk: ["united kingdom", "great britain", "britain"],
-  "south korea": ["korea"],
-  "new york city": ["nyc"],
-})) {
-  LOCATION_ALIASES.set(normalizeSearchText(name), aliases.map(normalizeSearchText));
-  for (const alias of aliases) {
-    const normalizedAlias = normalizeSearchText(alias);
-    LOCATION_ALIASES.set(normalizedAlias, [
-      ...(LOCATION_ALIASES.get(normalizedAlias) || []),
-      normalizeSearchText(name),
-    ]);
-  }
-}
-
-function getLocationTerms(value) {
-  const normalized = normalizeSearchText(value);
-  return [normalized, ...(LOCATION_ALIASES.get(normalized) || [])];
-}
-
-function isBrazilCountry(location) {
-  return getLocationTerms(location).some((term) =>
-    ["br", "brazil", "brasil"].includes(normalizeSearchText(term)),
-  );
-}
-
-function containsLocationTerm(location, term) {
-  const normalizedLocation = normalizeSearchText(location);
-  const locationWords = new Set(normalizedLocation.split(" "));
-  const termWords = normalizeSearchText(term).split(" ").filter(Boolean);
-  return (
-    normalizedLocation === term ||
-    normalizedLocation.startsWith(`${term} `) ||
-    normalizedLocation.includes(` ${term} `) ||
-    normalizedLocation.endsWith(` ${term}`) ||
-    (termWords.length > 0 && termWords.every((word) => locationWords.has(word)))
-  );
-}
-
-function isBrazilLocation(location) {
-  const normalized = normalizeSearchText(location);
-  return (
-    ["br", "brazil", "brasil"].includes(normalized) ||
-    Object.keys(BRAZIL_STATES).some((state) => normalizeSearchText(state) === normalized) ||
-    (Object.values(BRAZIL_STATES).includes(normalized) && !US_STATE_CODES.has(normalized))
-  );
-}
-
-function matchesLocation(value, location) {
-  if (!location) return true;
-  const valueTerms = normalizeSearchText(value);
-  if (getLocationTerms(location).some((term) => containsLocationTerm(valueTerms, term))) return true;
-  if (
-    isBrazilLocation(location) &&
-    /\b(brazil|brasil|latam|latin america|worldwide|global|anywhere)\b/.test(valueTerms)
-  ) {
-    return true;
-  }
-  return false;
-}
-
-function matchesSourceLocation(value, location, source) {
-  if (isBrazilCountry(location) && ["gupy", "eudev"].includes(source)) return true;
-  return matchesLocation(value, location);
 }
 
 function matchesText(values, term) {
@@ -964,6 +823,14 @@ const server = http.createServer(async (request, response) => {
   await serveStaticFile(requestUrl.pathname, response);
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`Job Finder running at http://${HOST}:${PORT}`);
-});
+module.exports = {
+  SOURCE_INFO,
+  SOURCE_ADAPTERS,
+  getEuDevJobDetails,
+};
+
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`Job Finder running at http://${HOST}:${PORT}`);
+  });
+}
